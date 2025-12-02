@@ -1,0 +1,38 @@
+name = "google-maps"
+main = "src/worker.ts"
+compatibility_date = "2025-06-18"
+workers_dev = true
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# MCP protocol
+MCP_PROTOCOL_VERSION = "2025-06-18"
+MCP_TITLE = "Google Maps"
+MCP_VERSION = "1.0.0"
+
+# Auth: require Bearer token to access this MCP server
+# Generate a random token for clients: openssl rand -hex 32
+# Then set it: wrangler secret put BEARER_TOKEN
+AUTH_ENABLED = "true"
+AUTH_STRATEGY = "bearer"
+
+# Environment
+NODE_ENV = "production"
+
+# Secrets (set via wrangler secret put):
+#
+# 1. BEARER_TOKEN - Auth token for clients to access this MCP server
+#    Generate: openssl rand -hex 32
+#    Set: wrangler secret put BEARER_TOKEN
+#
+# 2. API_KEY - Your Google Maps Platform API key (used internally)
+#    Get from: https://console.cloud.google.com/apis/credentials
+#    Enable: "Places API (New)" and "Routes API"
+#    Set: wrangler secret put API_KEY
+
+# KV namespace for session storage (required by template)
+# Create with: wrangler kv:namespace create TOKENS
+# Then replace the id below with your actual namespace ID
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "YOUR_KV_NAMESPACE_ID"
