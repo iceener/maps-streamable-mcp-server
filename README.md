@@ -2,7 +2,22 @@
 
 Streamable HTTP MCP server for Google Maps — search places, get details, and plan routes.
 
+**Repository:** [github.com/iceener/maps-streamable-mcp-server](https://github.com/iceener/maps-streamable-mcp-server)
+
 Author: [overment](https://x.com/_overment)
+
+## Use Case
+
+This MCP server is designed for **location-aware AI agents** running on mobile devices like Apple Watch or iPhone. Your client provides the current position, and the AI can:
+
+- Find nearby places (restaurants, stores, gas stations)
+- Get directions with turn-by-turn navigation
+- Compare distances to multiple destinations
+- Check opening hours and ratings before you arrive
+
+<img src="docs/watch.png" width="400" />
+
+It also pairs well with other MCP tools — for example, combining with a **Tesla MCP** to set navigation destinations directly in your car.
 
 ## Notice
 
@@ -208,7 +223,7 @@ Calculate routes or distance matrix.
   destinations: [{ latitude: 40.7580, longitude: -73.9855 }];
   mode?: "walk" | "drive" | "transit";  // Default: "walk"
   options?: {
-    departure_time?: string;   // ISO 8601
+    departure_time?: string;   // ISO 8601 or "now"
     include_steps?: boolean;   // Turn-by-turn instructions
     include_polyline?: boolean;
   };
@@ -294,7 +309,8 @@ Distances from origin to 3 destinations:
     "origin": { "latitude": 40.7128, "longitude": -74.0060 },
     "destinations": [{ "latitude": 40.7580, "longitude": -73.9855 }],
     "mode": "walk",
-    "options": { "include_steps": true }
+    "departure_time": "now",
+    "include_steps": true
   }
 }
 ```
