@@ -44,9 +44,13 @@ export class KvSessionStore implements SessionStore {
   }
 
   async ensure(sessionId: string): Promise<void> {
-    const existing = await this.get(sessionId);
-    if (!existing) {
-      await this.put(sessionId, { created_at: Date.now() });
+    // Memory-only session ensure - no KV writes
+    // Sessions are ephemeral per-isolate state; this saves 1 write op per request
+    if (this.fallback) {
+      const existing = await this.fallback.get(sessionId);
+      if (!existing) {
+        await this.fallback.put(sessionId, { created_at: Date.now() });
+      }
     }
   }
 
