@@ -2,7 +2,7 @@
  * Search Places tool - unified search for nearby and text-based queries.
  */
 
-import { z } from 'zod';
+import * as z from 'zod/v4';
 import { toolsMetadata } from '../../config/metadata.js';
 import {
   GoogleMapsClient,
@@ -188,7 +188,7 @@ export const searchPlacesTool = defineTool({
       };
     }
 
-    const client = new GoogleMapsClient(apiKey);
+    const client = new GoogleMapsClient(apiKey, context.signal);
 
     try {
       let places: Place[] = [];

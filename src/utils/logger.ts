@@ -1,59 +1,53 @@
-export type LogLevel = 'debug' | 'info' | 'warning' | 'error';
+import type { LogLevel } from '../config/env.js';
 
-class Logger {
-  private currentLevel: LogLevel = 'info';
-
-  private readonly levels: Record<LogLevel, number> = {
-    debug: 0,
-    info: 1,
-    warning: 2,
-    error: 3,
-  };
-
-  setLevel(level: string): void {
-    if (this.isValidLevel(level)) {
-      this.currentLevel = level as LogLevel;
-    }
-  }
-
-  // Kept for API compatibility with mcp.ts
-  setServer(_server: unknown): void {
-    // No-op - we just log to console
-  }
-
-  private isValidLevel(level: string): level is LogLevel {
-    return level in this.levels;
-  }
-
-  private shouldLog(level: LogLevel): boolean {
-    return this.levels[level] >= this.levels[this.currentLevel];
-  }
-
-  private async log(level: LogLevel, logger: string, data: unknown): Promise<void> {
-    if (!this.shouldLog(level)) return;
-
-    // Log to console
-    const timestamp = new Date().toISOString();
-    const logData =
-      typeof data === 'object' ? JSON.stringify(data, null, 2) : String(data);
-    console.log(`[${timestamp}] ${level.toUpperCase()} ${logger}: ${logData}`);
-  }
-
-  async debug(logger: string, data?: unknown): Promise<void> {
-    await this.log('debug', logger, data ?? {});
-  }
-
-  async info(logger: string, data?: unknown): Promise<void> {
-    await this.log('info', logger, data ?? {});
-  }
-
-  async warning(logger: string, data?: unknown): Promise<void> {
-    await this.log('warning', logger, data ?? {});
-  }
-
-  async error(logger: string, data?: unknown): Promise<void> {
-    await this.log('error', logger, data ?? {});
-  }
+interface LogData {
+  message: string;
+  [key: string]: unknown;
 }
-
-export const logger = new Logger();
+const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warning: 2, error: 3 };
+const SENSITIVE = ['password', 'token', 'secret', 'key', 'authorization'];
+let currentLevel: LogLevel = 'info';
+function sanitize(value: unknown, key = ''): unknown {
+  if (SENSITIVE.some((part) => key.toLowerCase().includes(part))) return '[REDACTED]';
+  if (Array.isArray(value)) return value.map((entry) => sanitize(entry, key));
+  if (value && typeof value === 'object') {
+    if (value instanceof Error) return { name: value.name, message: value.message };
+    return Object.fromEntries(
+      Object.entries(value).map(([name, entry]) => [name, sanitize(entry, name)]),
+    );
+  }
+  return value;
+}
+function write(level: LogLevel, scope: string, data: LogData): void {
+  if (LEVELS[level] < LEVELS[currentLevel]) return;
+  const { message, ...fields } = data;
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level,
+    scope,
+    message,
+    ...(sanitize(fields) as object),
+  });
+  if (level === 'error') console.error(line);
+  else if (level === 'warning') console.warn(line);
+  else if (level === 'debug') console.debug(line);
+  else console.info(line);
+}
+export const logger = {
+  setLevel(level: LogLevel): void {
+    currentLevel = level;
+  },
+  debug(scope: string, data: LogData): void {
+    write('debug', scope, data);
+  },
+  info(scope: string, data: LogData): void {
+    write('info', scope, data);
+  },
+  warning(scope: string, data: LogData): void {
+    write('warning', scope, data);
+  },
+  error(scope: string, data: LogData): void {
+    write('error', scope, data);
+  },
+};
+export const sharedLogger = logger;

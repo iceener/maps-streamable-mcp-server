@@ -2,6 +2,10 @@
 
 Streamable HTTP MCP server for Google Maps — search places, get details, and plan routes.
 
+> **Release status (2026-07-27):** this repository pins `@modelcontextprotocol/server` and the test-only `@modelcontextprotocol/client` to `2.0.0-beta.5`, with Zod 4 and the candidate `2026-07-28` protocol. The dated protocol and stable v2 SDK are not final at this commit; do not claim final conformance until the release gate is verified.
+
+The Bun and Cloudflare Workers entry points share one fetch-native handler per deployment and create a fresh MCP server for every request. Modern HTTP is stateless; compatibility with 2025-era clients uses the SDK's stateless fallback and does not create MCP sessions.
+
 **Repository:** [github.com/iceener/maps-streamable-mcp-server](https://github.com/iceener/maps-streamable-mcp-server)
 
 Author: [overment](https://x.com/_overment)
@@ -22,8 +26,8 @@ It also pairs well with other MCP tools — for example, combining with a **Tesl
 ## Notice
 
 This repo works in two ways:
-- As a **Node/Hono server** for local workflows
-- As a **Cloudflare Worker** for remote interactions
+- As a fetch-native **Bun server** for local workflows
+- As a fetch-native **Cloudflare Worker** for remote interactions
 
 ## Features
 
@@ -91,15 +95,9 @@ bun dev
 
 ### 3. Cloudflare Worker (Deploy)
 
-1. Create KV namespace:
+1. Update `wrangler.jsonc` for the production URL and exact Host/Origin allowlists. The checked-in values are local-safe defaults. The existing `TOKENS` binding is retained for deployment compatibility but is not used for MCP sessions.
 
-```bash
-wrangler kv:namespace create TOKENS
-```
-
-2. Update `wrangler.toml` with your KV namespace ID
-
-3. Set secrets:
+2. Set secrets:
 
 ```bash
 # Auth token for clients (generate it using: openssl rand -hex 32). This makes the connection to your MCP not open to everyone, but only to those who have this API key.
@@ -109,10 +107,13 @@ wrangler secret put BEARER_TOKEN
 wrangler secret put API_KEY
 ```
 
-4. Deploy:
+3. Validate generated types and deploy:
 
 ```bash
-wrangler deploy
+bun run types:worker
+bun run types:worker:check
+bun run build:worker
+bun run deploy
 ```
 
 Endpoint: `https://<worker-name>.<account>.workers.dev/mcp`
@@ -173,11 +174,9 @@ Find places by text query or type near a location.
   };
   types?: string[];            // ["restaurant", "cafe"]
   radius?: number;             // Meters (default: 1000, max: 50000)
-  filters?: {
-    open_now?: boolean;
-    min_rating?: number;       // 0-5
-    price_levels?: string[];   // PRICE_LEVEL_INEXPENSIVE, etc.
-  };
+  open_now?: boolean;
+  min_rating?: number;         // 0-5
+  price_levels?: Array<"FREE" | "INEXPENSIVE" | "MODERATE" | "EXPENSIVE" | "VERY_EXPENSIVE">;
   max_results?: number;        // Default: 10, max: 20
   sort_by?: "distance" | "rating" | "relevance";
 }
@@ -221,12 +220,10 @@ Calculate routes or distance matrix.
 {
   origin: { latitude: 40.7128, longitude: -74.0060 };
   destinations: [{ latitude: 40.7580, longitude: -73.9855 }];
-  mode?: "walk" | "drive" | "transit";  // Default: "walk"
-  options?: {
-    departure_time?: string;   // ISO 8601 or "now"
-    include_steps?: boolean;   // Turn-by-turn instructions
-    include_polyline?: boolean;
-  };
+  mode?: "walk" | "drive" | "transit" | "bicycle";  // Default: "walk"
+  departure_time?: string;     // ISO 8601 or "now"
+  include_steps?: boolean;     // Turn-by-turn instructions
+  include_polyline?: boolean;
 }
 
 // Multiple destinations → distance matrix
@@ -235,7 +232,7 @@ Calculate routes or distance matrix.
   destinations: [
     { latitude: 40.7580, longitude: -73.9855 },
     { latitude: 40.7484, longitude: -73.9857 },
-    "Empire State Building"    // Address or place ID also works
+    { address: "Empire State Building" } // Or { place_id: "..." }
   ];
   mode?: "walk";
 }
@@ -269,7 +266,7 @@ Distances from origin to 3 destinations:
   "arguments": {
     "types": ["cafe"],
     "location": { "latitude": 40.7128, "longitude": -74.0060 },
-    "filters": { "open_now": true },
+    "open_now": true,
     "sort_by": "distance"
   }
 }
@@ -323,9 +320,9 @@ Distances from origin to 3 destinations:
   "arguments": {
     "origin": { "latitude": 40.7128, "longitude": -74.0060 },
     "destinations": [
-      "Times Square, NYC",
-      "Central Park, NYC",
-      "Brooklyn Bridge, NYC"
+      { "address": "Times Square, NYC" },
+      { "address": "Central Park, NYC" },
+      { "address": "Brooklyn Bridge, NYC" }
     ],
     "mode": "walk"
   }
@@ -357,22 +354,19 @@ Distances from origin to 3 destinations:
 
 ### Cloudflare Workers
 
-**wrangler.toml:**
-```toml
-AUTH_ENABLED = "true"
-AUTH_STRATEGY = "bearer"
+Relevant `wrangler.jsonc` vars:
+```jsonc
+"vars": {
+  "AUTH_ENABLED": "true",
+  "AUTH_STRATEGY": "bearer"
+}
 ```
 
 **Secrets (set via `wrangler secret put`):**
 - `BEARER_TOKEN` — Random auth token for clients
 - `API_KEY` — Google Maps Platform API key
 
-**KV Namespace:**
-```toml
-[[kv_namespaces]]
-binding = "TOKENS"
-id = "your-kv-namespace-id"
-```
+The existing `TOKENS` binding remains in `wrangler.jsonc`, but the SDK-owned stateless HTTP fallback does not read it or create sessions.
 
 ---
 
@@ -385,7 +379,6 @@ id = "your-kv-namespace-id"
 | "Places API error 403" | Enable Places API (New) in Google Cloud Console |
 | "Routes API error 404" | Enable Routes API in Google Cloud Console |
 | Invalid Place ID | Place IDs expire. Search again to get fresh IDs |
-| KV namespace error | Run `wrangler kv:namespace create TOKENS` and update wrangler.toml |
 
 ---
 
@@ -395,8 +388,11 @@ id = "your-kv-namespace-id"
 bun dev           # Start with hot reload
 bun run typecheck # TypeScript check
 bun run lint      # Lint code
-bun run build     # Production build
-bun start         # Run production
+bun run build     # Bun production build
+bun run build:worker
+bun run types:worker:check
+bun test           # Modern, legacy, cancellation, security, and provider tests
+bun start          # Run Bun production entry point
 ```
 
 ---
@@ -414,8 +410,12 @@ src/
 │   └── google-maps.ts         # Google Maps API client
 ├── config/
 │   └── metadata.ts            # Server & tool descriptions
-├── index.ts                   # Node.js entry
-└── worker.ts                  # Workers entry
+├── core/
+│   ├── mcp.ts                 # Fresh server factory
+│   └── runtime.ts             # Deployment-scoped v2 handler
+├── http/                      # Auth, body bounds, Host/Origin/CORS
+├── index.ts                   # Bun entry
+└── worker.ts                  # Workers isolate entry
 ```
 
 ---

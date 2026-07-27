@@ -281,9 +281,11 @@ export function buildFieldMask(categories: string[]): string {
 
 export class GoogleMapsClient {
   private apiKey: string;
+  private signal?: AbortSignal;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, signal?: AbortSignal) {
     this.apiKey = apiKey;
+    this.signal = signal;
   }
 
   private async request<T>(
@@ -306,6 +308,7 @@ export class GoogleMapsClient {
       const response = await fetch(url, {
         ...options,
         headers,
+        signal: options.signal ?? this.signal,
       });
 
       if (!response.ok) {

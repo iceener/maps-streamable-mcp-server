@@ -2,7 +2,7 @@
  * Get Place tool - get detailed information about a specific place.
  */
 
-import { z } from 'zod';
+import * as z from 'zod/v4';
 import { toolsMetadata } from '../../config/metadata.js';
 import {
   GoogleMapsClient,
@@ -131,7 +131,7 @@ export const getPlaceTool = defineTool({
       };
     }
 
-    const client = new GoogleMapsClient(apiKey);
+    const client = new GoogleMapsClient(apiKey, context.signal);
 
     try {
       // Build field list based on requested categories
@@ -248,7 +248,9 @@ export const getPlaceTool = defineTool({
         if (hours.length > 0) {
           lines.push('');
           lines.push('**Opening Hours:**');
-          hours.forEach((h) => lines.push(`  ${h}`));
+          hours.forEach((hour) => {
+            lines.push(`  ${hour}`);
+          });
           structuredData.opening_hours = hours;
         }
 
@@ -261,7 +263,9 @@ export const getPlaceTool = defineTool({
         const formattedReviews = reviewsToShow.map((r) => formatReview(r));
 
         lines.push('**Reviews:**');
-        formattedReviews.forEach((r) => lines.push(r.text));
+        formattedReviews.forEach((review) => {
+          lines.push(review.text);
+        });
         lines.push('');
 
         structuredData.reviews = formattedReviews.map((r) => r.data);
@@ -273,7 +277,9 @@ export const getPlaceTool = defineTool({
         const formattedPhotos = photosToShow.map((p) => formatPhoto(p, client, 800));
 
         lines.push('**Photos:**');
-        formattedPhotos.forEach((p) => lines.push(p.text));
+        formattedPhotos.forEach((photo) => {
+          lines.push(photo.text);
+        });
         lines.push('');
 
         structuredData.photos = formattedPhotos.map((p) => p.data);

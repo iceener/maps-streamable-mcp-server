@@ -2,7 +2,7 @@
  * Get Route tool - get directions and distance between locations.
  */
 
-import { z } from 'zod';
+import * as z from 'zod/v4';
 import { toolsMetadata } from '../../config/metadata.js';
 import {
   GoogleMapsClient,
@@ -162,7 +162,9 @@ function formatRoute(
   if (route.warnings?.length) {
     lines.push('');
     lines.push('⚠️ Warnings:');
-    route.warnings.forEach((w) => lines.push(`  - ${w}`));
+    route.warnings.forEach((warning) => {
+      lines.push(`  - ${warning}`);
+    });
   }
 
   const stepsData: Record<string, unknown>[] = [];
@@ -281,7 +283,7 @@ export const getRouteTool = defineTool({
       };
     }
 
-    const client = new GoogleMapsClient(apiKey);
+    const client = new GoogleMapsClient(apiKey, context.signal);
     const travelMode = getTravelMode(args.mode);
     const origin = convertWaypoint(args.origin);
     const destinations = args.destinations.map(convertWaypoint);
@@ -370,7 +372,9 @@ export const getRouteTool = defineTool({
         return aDur - bDur;
       });
 
-      sorted.forEach((d) => lines.push(d.text));
+      sorted.forEach((destination) => {
+        lines.push(destination.text);
+      });
 
       // Highlight closest
       const closest = sorted.find((d) => d.data.available);

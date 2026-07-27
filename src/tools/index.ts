@@ -1,107 +1,47 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { contextRegistry } from '../core/context.js';
-import { sharedTools, type ToolContext } from '../shared/tools/registry.js';
-import { logger } from '../utils/logger.js';
+import type { McpServer } from '@modelcontextprotocol/server';
+import type { AppConfig } from '../config/env.js';
+import { getPlaceTool } from '../shared/tools/get-place.js';
+import { getRouteTool } from '../shared/tools/get-route.js';
+import { searchPlacesTool } from '../shared/tools/search-places.js';
 
-/**
- * Register all tools with the MCP server.
- * Uses shared tools that work in both Node and Workers.
- */
-export function registerTools(server: McpServer): void {
-  const registeredNames: string[] = [];
-
-  // Register shared tools (work in both Node and Workers)
-  for (const tool of sharedTools) {
-    try {
-      const wrappedHandler = createWrappedHandler(tool.handler);
-
-      // Shared tools use Zod schemas - pass .shape for SDK compatibility
-      server.registerTool(
-        tool.name,
-        {
-          description: tool.description,
-          inputSchema: tool.inputSchema.shape,
-          ...(tool.outputSchema && { outputSchema: tool.outputSchema }),
-          ...(tool.annotations && { annotations: tool.annotations }),
-        },
-        wrappedHandler as Parameters<typeof server.registerTool>[2],
-      );
-
-      registeredNames.push(tool.name);
-      logger.debug('tools', { message: 'Registered shared tool', toolName: tool.name });
-    } catch (error) {
-      logger.error('tools', {
-        message: 'Failed to register shared tool',
-        toolName: tool.name,
-        error: (error as Error).message,
-      });
-      throw error;
-    }
-  }
-
-  logger.info('tools', {
-    message: `Registered ${registeredNames.length} tools`,
-    toolNames: registeredNames,
-  });
-}
-
-/**
- * Create a wrapped handler for shared tools.
- * Adapts the shared ToolContext to the SDK's RequestHandlerExtra.
- *
- * SDK provides `extra.requestId` which we use to look up auth context from registry.
- */
-function createWrappedHandler(
-  handler: (args: Record<string, unknown>, context: ToolContext) => Promise<unknown>,
-) {
-  return async (
-    args: Record<string, unknown>,
-    extra?: {
-      requestId?: string | number;
-      _meta?: { progressToken?: string | number };
-      signal?: AbortSignal;
+export function registerTools(server: McpServer, config: AppConfig): void {
+  server.registerTool(
+    searchPlacesTool.name,
+    {
+      description: searchPlacesTool.description,
+      inputSchema: searchPlacesTool.inputSchema,
+      annotations: searchPlacesTool.annotations,
     },
-  ) => {
-    // SDK provides requestId at top level of extra
-    const requestId = extra?.requestId;
-
-    // Look up auth context from registry (stored by MCP routes with auth info)
-    const existingContext = requestId ? contextRegistry.get(requestId) : undefined;
-
-    // Build shared ToolContext
-    const context: ToolContext = {
-      sessionId: String(requestId || crypto.randomUUID()),
-      signal: extra?.signal,
-      meta: {
-        progressToken: extra?._meta?.progressToken,
-        requestId: requestId ? String(requestId) : undefined,
-      },
-      // Auth from context registry
-      authStrategy: existingContext?.authStrategy,
-      providerToken: existingContext?.providerToken,
-      provider: existingContext?.provider
-        ? {
-            accessToken: existingContext.provider.access_token,
-            refreshToken: existingContext.provider.refresh_token,
-            expiresAt: existingContext.provider.expires_at,
-            scopes: existingContext.provider.scopes,
-          }
-        : undefined,
-      resolvedHeaders: existingContext?.resolvedHeaders,
-      authHeaders: existingContext?.authHeaders as Record<string, string> | undefined,
-      // Environment variables for API keys etc.
-      env: {
-        API_KEY: process.env.API_KEY,
-      },
-    };
-
-    try {
-      const result = await handler(args, context);
-      return result;
-    } finally {
-      if (requestId) {
-        contextRegistry.delete(requestId);
-      }
-    }
-  };
+    (args, context) =>
+      searchPlacesTool.handler(args, {
+        signal: context.mcpReq.signal,
+        env: { API_KEY: config.API_KEY },
+      }),
+  );
+  server.registerTool(
+    getPlaceTool.name,
+    {
+      description: getPlaceTool.description,
+      inputSchema: getPlaceTool.inputSchema,
+      annotations: getPlaceTool.annotations,
+    },
+    (args, context) =>
+      getPlaceTool.handler(args, {
+        signal: context.mcpReq.signal,
+        env: { API_KEY: config.API_KEY },
+      }),
+  );
+  server.registerTool(
+    getRouteTool.name,
+    {
+      description: getRouteTool.description,
+      inputSchema: getRouteTool.inputSchema,
+      annotations: getRouteTool.annotations,
+    },
+    (args, context) =>
+      getRouteTool.handler(args, {
+        signal: context.mcpReq.signal,
+        env: { API_KEY: config.API_KEY },
+      }),
+  );
 }
