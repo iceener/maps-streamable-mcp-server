@@ -1,424 +1,130 @@
 # Google Maps MCP Server
 
-Streamable HTTP MCP server for Google Maps — search places, get details, and plan routes.
+This server is a remote [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for Google Maps. It finds places, gives place details, and plans routes. It uses the Google Maps Platform [Places API (New)](https://developers.google.com/maps/documentation/places/web-service/op-overview) and [Routes API](https://developers.google.com/maps/documentation/routes).
 
-> **Release status (2026-07-27):** this repository pins `@modelcontextprotocol/server` and the test-only `@modelcontextprotocol/client` to `2.0.0-beta.5`, with Zod 4 and the candidate `2026-07-28` protocol. The dated protocol and stable v2 SDK are not final at this commit; do not claim final conformance until the release gate is verified.
+The server runs on **Cloudflare Workers** and on **Bun**. It is built on the [MCP server template](https://github.com/iceener/streamable-mcp-server-template), version 2.1, and the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) 2.3.0. It uses protocol version `2026-07-28`. It also accepts clients that use the 2025 protocol versions.
 
-The Bun and Cloudflare Workers entry points share one fetch-native handler per deployment and create a fresh MCP server for every request. Modern HTTP is stateless; compatibility with 2025-era clients uses the SDK's stateless fallback and does not create MCP sessions.
+The server is for agents that know the location of the user, for example on a watch or a phone. The client gives the current position, and the model can:
 
-**Repository:** [github.com/iceener/maps-streamable-mcp-server](https://github.com/iceener/maps-streamable-mcp-server)
+- Find places near the user, by type or by name.
+- Read the opening hours, ratings, reviews, contact data, and photos of a place.
+- Get walking, driving, cycling, or transit directions.
+- Compare the distance to several destinations.
 
-Author: [overment](https://x.com/_overment)
-
-## Use Case
-
-This MCP server is designed for **location-aware AI agents** running on mobile devices like Apple Watch or iPhone. Your client provides the current position, and the AI can:
-
-- Find nearby places (restaurants, stores, gas stations)
-- Get directions with turn-by-turn navigation
-- Compare distances to multiple destinations
-- Check opening hours and ratings before you arrive
-
-<img src="docs/watch.png" width="400" />
-
-It also pairs well with other MCP tools — for example, combining with a **Tesla MCP** to set navigation destinations directly in your car.
-
-## Notice
-
-This repo works in two ways:
-- As a fetch-native **Bun server** for local workflows
-- As a fetch-native **Cloudflare Worker** for remote interactions
-
-## Features
-
-- ✅ **Places** — Search nearby places, restaurants, landmarks by text or type
-- ✅ **Details** — Get hours, ratings, reviews, photos, contact info
-- ✅ **Routes** — Calculate walking, driving, transit directions
-- ✅ **Distance Matrix** — Compare distances to multiple destinations
-- ✅ **Location-aware** — All tools work with your current position
-- ✅ **Dual Runtime** — Node.js/Bun or Cloudflare Workers
-
-### Design Principles
-
-- **LLM-friendly**: Unified tools, not 1:1 API mirrors
-- **Watch-ready**: Designed for AI agents with location context
-- **Smart defaults**: 1km radius, 10 results, walking mode
-- **Clear feedback**: Place IDs visible for follow-up queries
-
----
-
-## Installation
-
-Prerequisites: [Bun](https://bun.sh/), [Google Cloud](https://console.cloud.google.com) project.
-
-### 0. Client Setup
-Your client needs to be aware of the current time and your current location, as both values will be used for searching and planning.
-
-### 1. Get Google Maps API Key
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a new project (or select existing)
-3. Navigate to **APIs & Services > Library**
-4. Enable **Places API (New)** and **Routes API**
-5. Go to **APIs & Services > Credentials**
-6. Click **Create Credentials > API Key**
-7. (Recommended) Restrict key to Places API and Routes API
-
-### 2. Local Development
-
-```bash
-cd google-maps-mcp
-bun install
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-PORT=3000
-AUTH_ENABLED=true
-AUTH_STRATEGY=bearer
-
-# Generate with: openssl rand -hex 32
-BEARER_TOKEN=your-random-auth-token
-
-# Your Google Maps API key
-API_KEY=your-google-maps-api-key
-```
-
-Run:
-
-```bash
-bun dev
-# MCP: http://127.0.0.1:3000/mcp
-```
-
-### 3. Cloudflare Worker (Deploy)
-
-1. Update `wrangler.jsonc` for the production URL and exact Host/Origin allowlists. The checked-in values are local-safe defaults. The existing `TOKENS` binding is retained for deployment compatibility but is not used for MCP sessions.
-
-2. Set secrets:
-
-```bash
-# Auth token for clients (generate it using: openssl rand -hex 32). This makes the connection to your MCP not open to everyone, but only to those who have this API key.
-wrangler secret put BEARER_TOKEN
-
-# Your Google Maps API key
-wrangler secret put API_KEY
-```
-
-3. Validate generated types and deploy:
-
-```bash
-bun run types:worker
-bun run types:worker:check
-bun run build:worker
-bun run deploy
-```
-
-Endpoint: `https://<worker-name>.<account>.workers.dev/mcp`
-
----
-
-## Client Configuration
-
-### Claude Desktop / Cursor (Local)
-
-```json
-{
-  "mcpServers": {
-    "google-maps": {
-      "command": "npx",
-      "args": ["mcp-remote", "http://localhost:3000/mcp", "--transport", "http-only"],
-      "env": { "NO_PROXY": "127.0.0.1,localhost" }
-    }
-  }
-}
-```
-
-### Claude Desktop / Cursor (Cloudflare Worker)
-
-```json
-{
-  "mcpServers": {
-    "google-maps": {
-      "command": "npx",
-      "args": ["mcp-remote", "https://your-worker.workers.dev/mcp", "--transport", "http-only"]
-    }
-  }
-}
-```
-
-### Alice App
-
-Add as MCP server with:
-- URL: `https://your-worker.workers.dev/mcp`
-- Type: `streamable-http`
-- Header: `Authorization: Bearer <your-BEARER_TOKEN>`
-
----
+<img src="docs/watch.png" width="400" alt="The server used from a watch" />
 
 ## Tools
 
-### `search_places`
+| Tool | Function |
+|---|---|
+| `search_places` | Finds places near a location. With `query`, it does a text search ("sushi", "Starbucks"). With `types`, it finds places of those types ("cafe", "pharmacy"). With neither, it finds all places in the radius. |
+| `get_place` | Gives the details of a place from a `place_id`. Select the data with `fields`: `basic`, `contact`, `hours`, `reviews`, `photos`. |
+| `get_route` | With one destination, gives a route, and turn-by-turn steps if you ask for them. With two or more destinations (25 maximum), compares the time and distance to each, and names the closest. |
 
-Find places by text query or type near a location.
+Each tool gives text for the model and structured data. The tool descriptions give all inputs and outputs. All tools only read data.
 
-```ts
-// Input
-{
-  query?: string;              // "sushi near Central Park"
-  location: {                  // Required: your current position
-    latitude: number;
-    longitude: number;
-  };
-  types?: string[];            // ["restaurant", "cafe"]
-  radius?: number;             // Meters (default: 1000, max: 50000)
-  open_now?: boolean;
-  min_rating?: number;         // 0-5
-  price_levels?: Array<"FREE" | "INEXPENSIVE" | "MODERATE" | "EXPENSIVE" | "VERY_EXPENSIVE">;
-  max_results?: number;        // Default: 10, max: 20
-  sort_by?: "distance" | "rating" | "relevance";
-}
+Examples of requests:
 
-// Output
-- Restaurant Name (500m) ★4.5(234) $$ 🟢 Open
-  123 Main St, New York
-  ID: ChIJN1t_tDeuEmsRUsoyG83frY4
-```
+- "Coffee near me": `search_places` with `types: ["cafe"]` and `open_now: true`.
+- "Is the pharmacy on Main Street open?": `search_places`, then `get_place` with `fields: ["hours"]`.
+- "Which is closer, A or B?": `get_route` with both places as destinations.
 
-> Use `query` for text search, or `types` for category-based nearby search.
+Photo results contain public image URLs that Google makes for each request. They never contain the API key.
 
-### `get_place`
+## Connect a client
 
-Get detailed information about a specific place.
+The server URL is the deployed Worker's `MCP_PUBLIC_URL`, for example `https://google-maps.<subdomain>.workers.dev/mcp`. Use the Streamable HTTP transport, and send the shared token in the `Authorization` header.
 
-```ts
-// Input
-{
-  place_id: string;            // From search_places results
-  fields?: string[];           // ["basic", "contact", "hours", "reviews", "photos"]
-}
+| Client | Procedure |
+|---|---|
+| Alice | Add an MCP server. Set the URL, the type `streamable-http`, and the header `Authorization: Bearer <BEARER_TOKEN>`. |
+| Claude Code | Run `claude mcp add --transport http google-maps <server URL> --header "Authorization: Bearer <BEARER_TOKEN>"`. |
+| MCP Inspector | Run `bun run inspector`. Select **Streamable HTTP**. Enter the URL. Add the `Authorization` header under **Authentication**. |
 
-// Output
-Name: Central Park
-Address: New York, NY, USA
-Rating: 4.8 (50000 reviews)
-Open Now: Yes
-Hours: Monday: 6:00 AM – 1:00 AM, ...
-Phone: +1 212-310-6600
-Website: https://centralparknyc.org
-Google Maps: https://maps.google.com/?cid=...
-```
+The client must give the model the current location of the user and the current time. The tools use both.
 
-### `get_route`
+## Authentication
 
-Calculate routes or distance matrix.
+Production uses `AUTH_MODE=bearer`. All clients send the same secret token, `BEARER_TOKEN`, as `Authorization: Bearer <token>`. The server compares the token in constant time. A request without the correct token gets `401`. The server publishes no OAuth documents, so clients do not try to sign in.
 
-```ts
-// Single destination → detailed route
-{
-  origin: { latitude: 40.7128, longitude: -74.0060 };
-  destinations: [{ latitude: 40.7580, longitude: -73.9855 }];
-  mode?: "walk" | "drive" | "transit" | "bicycle";  // Default: "walk"
-  departure_time?: string;     // ISO 8601 or "now"
-  include_steps?: boolean;     // Turn-by-turn instructions
-  include_polyline?: boolean;
-}
+The Google API key (`API_KEY`) is a different secret. The server sends it to Google only, in the `X-Goog-Api-Key` header. The server never accepts a key from a client, and it never sends the client's token to Google.
 
-// Multiple destinations → distance matrix
-{
-  origin: { latitude: 40.7128, longitude: -74.0060 };
-  destinations: [
-    { latitude: 40.7580, longitude: -73.9855 },
-    { latitude: 40.7484, longitude: -73.9857 },
-    { address: "Empire State Building" } // Or { place_id: "..." }
-  ];
-  mode?: "walk";
-}
+For the authentication modes of the template, refer to the template's [docs/auth.md](https://github.com/iceener/streamable-mcp-server-template/blob/main/docs/auth.md).
 
-// Output (single)
-Route Summary: via 5th Ave
-Total Distance: 5.2 km
-Total Duration: 62 minutes
+## Configuration
 
-Steps:
-  1.1. Head north on Broadway
-  1.2. Turn right onto E 42nd St
-  ...
+The server identity (name, version, and instructions) is in `src/server.ts`. The deployment settings are environment variables. On Workers, the production values are in `wrangler.production.jsonc`, which is gitignored; `wrangler.production.example.jsonc` shows its shape.
 
-// Output (matrix)
-Distances from origin to 3 destinations:
-- To Times Square: 4.8 km, 58 min
-- To Empire State: 3.2 km, 38 min
-- To Central Park: 6.1 km, 73 min
-```
+| Variable | Production value | Function |
+|---|---|---|
+| `MCP_PUBLIC_URL` | `https://google-maps.<subdomain>.workers.dev/mcp` | The public URL of the endpoint. |
+| `MCP_ALLOWED_HOSTS` | `google-maps.<subdomain>.workers.dev` | The `Host` headers that the server accepts. |
+| `MCP_ALLOWED_ORIGIN_HOSTNAMES` | The worker host, `claude.ai`, `claude.com`, and the Alice hosts | The browser `Origin` headers that the server accepts. |
+| `MCP_LEGACY_MODE` | `stateless` | Serves 2025-era clients without sessions. |
+| `MCP_MAX_REQUEST_BYTES` | `1048576` | The largest request body. |
+| `AUTH_MODE` | `bearer` | The authentication mode. |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warning`, or `error`. |
+| `BEARER_TOKEN` | Secret | The shared token for clients. It must not contain whitespace. The server ignores whitespace at the start and at the end. |
+| `API_KEY` | Secret | The Google Maps Platform API key. The server does not start without it. |
+| `GOOGLE_API_ORIGIN` | Not set | For tests only. It sends Google requests to a loopback mock. |
 
----
+`.env.example` describes all variables for Bun. If the configuration is not valid, Bun does not start, and a Worker answers `500 {"error":"server_misconfigured"}` to all requests. The log gives each problem.
 
-## Examples
+## Set up Google Maps Platform
 
-### 1. Find nearby coffee shops
+1. In the [Google Cloud console](https://console.cloud.google.com), select or create a project.
+2. Enable **Places API (New)** and **Routes API**.
+3. Create an API key. Restrict it to these two APIs.
+4. Store the key as the `API_KEY` secret.
 
-```json
-{
-  "name": "search_places",
-  "arguments": {
-    "types": ["cafe"],
-    "location": { "latitude": 40.7128, "longitude": -74.0060 },
-    "open_now": true,
-    "sort_by": "distance"
-  }
-}
-```
+For the requests that the server sends to Google, refer to [docs/google-maps.md](docs/google-maps.md).
 
-### 2. Search by text
+## Deployment
 
-```json
-{
-  "name": "search_places",
-  "arguments": {
-    "query": "best pizza in Manhattan",
-    "location": { "latitude": 40.7128, "longitude": -74.0060 },
-    "max_results": 5
-  }
-}
-```
-
-### 3. Get place details
-
-```json
-{
-  "name": "get_place",
-  "arguments": {
-    "place_id": "ChIJN1t_tDeuEmsRUsoyG83frY4",
-    "fields": ["basic", "hours", "reviews"]
-  }
-}
-```
-
-### 4. Walking directions
-
-```json
-{
-  "name": "get_route",
-  "arguments": {
-    "origin": { "latitude": 40.7128, "longitude": -74.0060 },
-    "destinations": [{ "latitude": 40.7580, "longitude": -73.9855 }],
-    "mode": "walk",
-    "departure_time": "now",
-    "include_steps": true
-  }
-}
-```
-
-### 5. Compare distances to multiple places
-
-```json
-{
-  "name": "get_route",
-  "arguments": {
-    "origin": { "latitude": 40.7128, "longitude": -74.0060 },
-    "destinations": [
-      { "address": "Times Square, NYC" },
-      { "address": "Central Park, NYC" },
-      { "address": "Brooklyn Bridge, NYC" }
-    ],
-    "mode": "walk"
-  }
-}
-```
-
----
-
-## HTTP Endpoints
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/mcp` | POST | MCP JSON-RPC 2.0 |
-| `/health` | GET | Health check |
-
----
-
-## Environment Variables
-
-### Node.js (.env)
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `API_KEY` | ✓ | Google Maps Platform API key |
-| `BEARER_TOKEN` | ✓ | Auth token for MCP clients |
-| `PORT` | | Server port (default: 3000) |
-| `AUTH_ENABLED` | | Enable auth (default: true) |
-| `AUTH_STRATEGY` | | `bearer` (default) |
-
-### Cloudflare Workers
-
-Relevant `wrangler.jsonc` vars:
-```jsonc
-"vars": {
-  "AUTH_ENABLED": "true",
-  "AUTH_STRATEGY": "bearer"
-}
-```
-
-**Secrets (set via `wrangler secret put`):**
-- `BEARER_TOKEN` — Random auth token for clients
-- `API_KEY` — Google Maps Platform API key
-
-The existing `TOKENS` binding remains in `wrangler.jsonc`, but the SDK-owned stateless HTTP fallback does not read it or create sessions.
-
----
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| 401 Unauthorized | Check `BEARER_TOKEN` is set and client sends `Authorization: Bearer <token>` |
-| "API key not configured" | Set `API_KEY` secret: `wrangler secret put API_KEY` |
-| "Places API error 403" | Enable Places API (New) in Google Cloud Console |
-| "Routes API error 404" | Enable Routes API in Google Cloud Console |
-| Invalid Place ID | Place IDs expire. Search again to get fresh IDs |
-
----
+`bun run deploy` deploys the `google-maps` Worker with `wrangler deploy --config wrangler.production.jsonc`. Before you deploy, read [docs/deploy.md](docs/deploy.md). It gives the secret names and the checks to do after a deployment.
 
 ## Development
 
-```bash
-bun dev           # Start with hot reload
-bun run typecheck # TypeScript check
-bun run lint      # Lint code
-bun run build     # Bun production build
-bun run build:worker
-bun run types:worker:check
-bun test           # Modern, legacy, cancellation, security, and provider tests
-bun start          # Run Bun production entry point
-```
+1. Install the dependencies:
 
----
+   ```sh
+   bun install
+   ```
 
-## Architecture
+2. Copy `.env.example` to `.env`. Set `API_KEY`.
+3. Start the server:
+
+   ```sh
+   bun run dev
+   ```
+
+The server URL is `http://127.0.0.1:3000/mcp`. To use the Cloudflare local runtime, put `API_KEY` in `.dev.vars` and run `bun run dev:worker`. The URL is then `http://127.0.0.1:8787/mcp`.
+
+| Script | Function |
+|---|---|
+| `bun run check` | Does the type check, the lint check, and the tests. It also checks the generated Worker types. |
+| `bun run test:smoke` | Starts the real server on Bun and on workerd, and calls each tool through a loopback Google mock. It requires Node.js 22.18 or later. |
+| `bun run deploy` | Deploys to Cloudflare with the `production` settings. |
+| `bun run types:worker` | Makes the Worker types again. Run it after you change `wrangler.jsonc`. |
+
+The tests do not send requests to Google. `tests/contract.test.ts` makes sure that the tool names and input schemas do not change. `tests/routes.test.ts` makes sure that each public route gives the same status as before the template migration.
+
+### Project structure
 
 ```
 src/
-├── shared/
-│   └── tools/
-│       ├── search-places.ts   # Unified place search
-│       ├── get-place.ts       # Place details
-│       └── get-route.ts       # Routes & distance matrix
-├── services/
-│   └── google-maps.ts         # Google Maps API client
-├── config/
-│   └── metadata.ts            # Server & tool descriptions
-├── core/
-│   ├── mcp.ts                 # Fresh server factory
-│   └── runtime.ts             # Deployment-scoped v2 handler
-├── http/                      # Auth, body bounds, Host/Origin/CORS
-├── index.ts                   # Bun entry
-└── worker.ts                  # Workers isolate entry
+  server.ts       Server identity, dependencies, McpServer factory
+  settings.ts     API_KEY and the test-only Google origin
+  tools/          search_places, get_place, get_route. index.ts gives the order.
+  services/       google-maps.ts: the Places API and Routes API client
+  platform/       Template code. Do not change it.
+  bun.ts          Entry point for Bun
+  worker.ts       Entry point for Cloudflare Workers
+tests/            Tool, service, contract, and route tests, and the template's platform tests
+scripts/          Smoke tests and the loopback Google mock
 ```
 
----
+For the template's design, refer to its [docs/architecture.md](https://github.com/iceener/streamable-mcp-server-template/blob/main/docs/architecture.md) and [docs/tools.md](https://github.com/iceener/streamable-mcp-server-template/blob/main/docs/tools.md).
 
 ## License
 

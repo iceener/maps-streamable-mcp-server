@@ -1,17 +1,57 @@
+import * as z from 'zod/v4';
+
 /**
- * Google Maps Platform API client.
- * Supports Places API (New) and Routes API.
+ * Google Maps Platform client: Places API (New) and Routes API.
+ *
+ * Services know nothing about MCP. They take an `AbortSignal` so a cancelled tool call stops
+ * its upstream requests, check the shape of every response, and throw `GoogleMapsError` when
+ * Google refuses a request or does not answer. The API key comes from `src/settings.ts`, never
+ * from the caller: it travels only in the `X-Goog-Api-Key` header to Google, and it is removed
+ * from every error message this client produces.
  */
+export interface GoogleMapsService {
+  searchNearby(params: SearchNearbyParams, signal: AbortSignal): Promise<Place[]>;
+  searchText(params: TextSearchParams, signal: AbortSignal): Promise<Place[]>;
+  getPlace(params: PlaceDetailsParams, signal: AbortSignal): Promise<Place>;
+  /**
+   * A public HTTPS URL for a place photo, resolved through the Place Photos media endpoint.
+   * The URL never carries the API key.
+   */
+  getPhotoUri(photoName: string, size: PhotoSize, signal: AbortSignal): Promise<string>;
+  computeRoutes(params: ComputeRoutesParams, signal: AbortSignal): Promise<Route[]>;
+  computeRouteMatrix(
+    params: ComputeRouteMatrixParams,
+    signal: AbortSignal,
+  ): Promise<RouteMatrixElement[]>;
+}
 
-import { logger } from '../utils/logger.js';
+/**
+ * Google refused the request, did not answer in time, or sent something unusable. The message
+ * is safe to show to the model: it never contains the API key.
+ */
+export class GoogleMapsError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'GoogleMapsError';
+  }
+}
 
-const PLACES_API_BASE = 'https://places.googleapis.com/v1';
-const ROUTES_COMPUTE_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
-const ROUTES_MATRIX_URL =
-  'https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix';
+export interface GoogleMapsServiceOptions {
+  apiKey: string;
+  /** Tests only: a loopback origin that stands in for both Google API hosts. */
+  origin?: string | undefined;
+  /** Injected in tests. Defaults to the runtime's `fetch`. */
+  fetch?: typeof fetch;
+  /** Upper bound per request, including reading the response, on top of cancellation. */
+  timeoutMs?: number;
+}
 
 // ============================================================================
-// Types - Location
+// Types: locations and places
 // ============================================================================
 
 export interface LatLng {
@@ -21,12 +61,11 @@ export interface LatLng {
 
 export interface Circle {
   center: LatLng;
-  radius: number; // meters
+  /** Meters. */
+  radius: number;
 }
 
-// ============================================================================
-// Types - Places
-// ============================================================================
+export type Waypoint = LatLng | { placeId: string } | { address: string };
 
 export interface Place {
   id: string;
@@ -96,12 +135,13 @@ export interface AddressComponent {
 }
 
 // ============================================================================
-// Types - Routes
+// Types: routes
 // ============================================================================
 
 export interface Route {
   distanceMeters: number;
-  duration: string; // e.g., "1234s"
+  /** For example "1234s". */
+  duration: string;
   staticDuration?: string;
   polyline?: { encodedPolyline: string };
   description?: string;
@@ -165,8 +205,8 @@ export interface TransitDetails {
 }
 
 export interface RouteMatrixElement {
-  originIndex: number;
-  destinationIndex: number;
+  originIndex?: number;
+  destinationIndex?: number;
   status?: { code: number; message: string };
   condition?: 'ROUTE_EXISTS' | 'ROUTE_NOT_FOUND';
   distanceMeters?: number;
@@ -179,14 +219,15 @@ export interface RouteMatrixElement {
 }
 
 // ============================================================================
-// Request Parameters
+// Request parameters
 // ============================================================================
+
+export type TravelMode = 'WALK' | 'DRIVE' | 'BICYCLE' | 'TRANSIT' | 'TWO_WHEELER';
 
 export interface SearchNearbyParams {
   location: LatLng;
   radius: number;
-  includedTypes?: string[];
-  excludedTypes?: string[];
+  includedTypes?: string[] | undefined;
   maxResultCount?: number;
   rankPreference?: 'DISTANCE' | 'POPULARITY';
   languageCode?: string;
@@ -195,10 +236,9 @@ export interface SearchNearbyParams {
 export interface TextSearchParams {
   textQuery: string;
   locationBias?: LatLng | Circle;
-  includedType?: string;
   openNow?: boolean;
-  minRating?: number;
-  priceLevels?: string[];
+  minRating?: number | undefined;
+  priceLevels?: string[] | undefined;
   maxResultCount?: number;
   rankPreference?: 'DISTANCE' | 'RELEVANCE';
   languageCode?: string;
@@ -206,35 +246,41 @@ export interface TextSearchParams {
 
 export interface PlaceDetailsParams {
   placeId: string;
+  /** Place fields without the `places.` prefix, for example `displayName`. */
   fields: string[];
   languageCode?: string;
 }
 
+export interface PhotoSize {
+  maxWidth: number;
+  maxHeight?: number;
+}
+
 export interface ComputeRoutesParams {
-  origin: LatLng | { placeId: string } | { address: string };
-  destination: LatLng | { placeId: string } | { address: string };
-  intermediates?: Array<LatLng | { placeId: string } | { address: string }>;
-  travelMode: 'WALK' | 'DRIVE' | 'BICYCLE' | 'TRANSIT' | 'TWO_WHEELER';
-  departureTime?: string;
-  computeAlternativeRoutes?: boolean;
-  routeModifiers?: {
-    avoidTolls?: boolean;
-    avoidHighways?: boolean;
-    avoidFerries?: boolean;
-  };
+  origin: Waypoint;
+  destination: Waypoint;
+  travelMode: TravelMode;
+  departureTime?: string | undefined;
+  routeModifiers?:
+    | {
+        avoidTolls?: boolean;
+        avoidHighways?: boolean;
+        avoidFerries?: boolean;
+      }
+    | undefined;
   languageCode?: string;
 }
 
 export interface ComputeRouteMatrixParams {
-  origins: Array<LatLng | { placeId: string } | { address: string }>;
-  destinations: Array<LatLng | { placeId: string } | { address: string }>;
-  travelMode: 'WALK' | 'DRIVE' | 'BICYCLE' | 'TRANSIT' | 'TWO_WHEELER';
-  departureTime?: string;
+  origins: Waypoint[];
+  destinations: Waypoint[];
+  travelMode: TravelMode;
+  departureTime?: string | undefined;
   languageCode?: string;
 }
 
 // ============================================================================
-// Field Masks
+// Field masks
 // ============================================================================
 
 export const PLACE_FIELDS = {
@@ -249,12 +295,7 @@ export const PLACE_FIELDS = {
     'primaryTypeDisplayName',
   ],
   rating: ['rating', 'userRatingCount', 'priceLevel'],
-  contact: [
-    'nationalPhoneNumber',
-    'internationalPhoneNumber',
-    'websiteUri',
-    'googleMapsUri',
-  ],
+  contact: ['nationalPhoneNumber', 'internationalPhoneNumber', 'websiteUri', 'googleMapsUri'],
   hours: ['regularOpeningHours', 'currentOpeningHours', 'businessStatus'],
   reviews: ['reviews'],
   photos: ['photos'],
@@ -262,297 +303,283 @@ export const PLACE_FIELDS = {
   address: ['addressComponents', 'plusCode'],
 } as const;
 
-export function buildFieldMask(categories: string[]): string {
-  const fields = new Set<string>();
-  for (const cat of categories) {
-    const categoryFields = PLACE_FIELDS[cat as keyof typeof PLACE_FIELDS];
-    if (categoryFields) {
-      for (const field of categoryFields) {
-        fields.add(`places.${field}`);
-      }
-    }
-  }
-  return Array.from(fields).join(',');
+/** The search field mask: `places.<field>` for every field in the categories. */
+function searchFieldMask(categories: Array<keyof typeof PLACE_FIELDS>): string {
+  return [...new Set(categories.flatMap((category) => PLACE_FIELDS[category]))]
+    .map((field) => `places.${field}`)
+    .join(',');
 }
+
+const ROUTE_FIELD_MASK = [
+  'routes.distanceMeters',
+  'routes.duration',
+  'routes.polyline.encodedPolyline',
+  'routes.legs.distanceMeters',
+  'routes.legs.duration',
+  'routes.legs.startLocation',
+  'routes.legs.endLocation',
+  'routes.legs.steps.distanceMeters',
+  'routes.legs.steps.staticDuration',
+  'routes.legs.steps.navigationInstruction',
+  'routes.legs.steps.travelMode',
+  'routes.legs.steps.transitDetails',
+  'routes.localizedValues',
+  'routes.legs.localizedValues',
+  'routes.legs.steps.localizedValues',
+].join(',');
+
+const MATRIX_FIELD_MASK =
+  'originIndex,destinationIndex,status,condition,distanceMeters,duration,staticDuration,localizedValues';
+
+// ============================================================================
+// Response shapes. Only what the tools rely on is checked; Google adds fields over time.
+// ============================================================================
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const PlaceShape = z.custom<Place>((value) => isObject(value) && typeof value.id === 'string');
+const PlacesResponse = z.looseObject({ places: z.array(PlaceShape).optional() });
+const RoutesResponse = z.looseObject({ routes: z.array(z.custom<Route>(isObject)).optional() });
+const MatrixResponse = z.array(z.custom<RouteMatrixElement>(isObject));
+const PhotoMediaResponse = z.looseObject({ photoUri: z.unknown() });
+const ErrorResponse = z.object({ error: z.object({ message: z.string().optional() }) });
+
+const PHOTO_NAME = /^places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+$/;
+const MAX_PHOTO_PX = 4800;
 
 // ============================================================================
 // Client
 // ============================================================================
 
-export class GoogleMapsClient {
-  private apiKey: string;
-  private signal?: AbortSignal;
+export function createGoogleMapsService(options: GoogleMapsServiceOptions): GoogleMapsService {
+  const fetchImpl = options.fetch ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  const places = `${options.origin ?? 'https://places.googleapis.com'}/v1`;
+  const routes = options.origin ?? 'https://routes.googleapis.com';
+  const secrets = [options.apiKey, encodeURIComponent(options.apiKey)].filter(Boolean);
 
-  constructor(apiKey: string, signal?: AbortSignal) {
-    this.apiKey = apiKey;
-    this.signal = signal;
-  }
+  /** Provider messages may echo the request, key included. Never pass the key on. */
+  const redact = (message: string) =>
+    secrets.reduce((text, secret) => text.split(secret).join('[redacted]'), message);
 
-  private async request<T>(
-    baseUrl: string,
-    path: string,
-    options: RequestInit & { fieldMask?: string } = {},
+  async function request<T>(
+    url: string,
+    init: { method: 'GET' | 'POST'; body?: unknown; fieldMask?: string },
+    schema: z.ZodType<T>,
+    signal: AbortSignal,
   ): Promise<T> {
-    const url = `${baseUrl}${path}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-Goog-Api-Key': this.apiKey,
-      ...(options.headers as Record<string, string>),
+      'X-Goog-Api-Key': options.apiKey,
     };
+    if (init.fieldMask) headers['X-Goog-FieldMask'] = init.fieldMask;
 
-    if (options.fieldMask) {
-      headers['X-Goog-FieldMask'] = options.fieldMask;
-    }
-
+    let body: unknown;
     try {
-      const response = await fetch(url, {
-        ...options,
+      const response = await fetchImpl(url, {
+        method: init.method,
         headers,
-        signal: options.signal ?? this.signal,
+        ...(init.body !== undefined && { body: JSON.stringify(init.body) }),
+        // Never follow a redirect: fetch would resend X-Goog-Api-Key to wherever it points.
+        // Workers reject `redirect: 'error'`, so a 3xx is refused below like any error status.
+        redirect: 'manual',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
       });
-
       if (!response.ok) {
-        let errorMessage = `Google Maps API error: ${response.status} ${response.statusText}`;
-        try {
-          const errorData = (await response.json()) as {
-            error?: { message?: string; status?: string };
-          };
-          if (errorData.error?.message) {
-            errorMessage += ` - ${errorData.error.message}`;
-          }
-        } catch {
-          // Ignore JSON parse error
-        }
-        throw new Error(errorMessage);
+        const detail = ErrorResponse.safeParse(await response.json().catch(() => undefined));
+        const message = detail.success ? detail.data.error.message : undefined;
+        throw new GoogleMapsError(
+          redact(
+            `Google Maps API error: ${response.status} ${response.statusText}` +
+              (message ? ` - ${message}` : ''),
+          ),
+          response.status,
+        );
       }
-
-      return (await response.json()) as T;
+      body = await response.json();
     } catch (error) {
-      logger.error('google-maps-client', {
-        message: 'Request failed',
-        url,
-        error: (error as Error).message,
-      });
-      throw error;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // Places - Search Nearby
-  // --------------------------------------------------------------------------
-
-  async searchNearby(params: SearchNearbyParams): Promise<{ places: Place[] }> {
-    const body: Record<string, unknown> = {
-      locationRestriction: {
-        circle: {
-          center: params.location,
-          radius: params.radius,
+      // Cancelled by the caller, or already classified: pass it on unchanged.
+      if (signal.aborted || error instanceof GoogleMapsError) throw error;
+      // A network failure, a timeout, or a body cut off or garbled in transit.
+      throw new GoogleMapsError(
+        'Google Maps did not respond in time, or the response was cut off',
+        undefined,
+        {
+          cause: error,
         },
-      },
-      maxResultCount: params.maxResultCount ?? 10,
-      rankPreference: params.rankPreference ?? 'DISTANCE',
-      languageCode: params.languageCode ?? 'en',
-    };
-
-    if (params.includedTypes?.length) {
-      body.includedTypes = params.includedTypes;
+      );
     }
-    if (params.excludedTypes?.length) {
-      body.excludedTypes = params.excludedTypes;
-    }
-
-    const fieldMask = buildFieldMask(['basic', 'rating', 'hours']);
-
-    return this.request(PLACES_API_BASE, '/places:searchNearby', {
-      method: 'POST',
-      body: JSON.stringify(body),
-      fieldMask,
-    });
+    // A complete response in an unexpected shape is a bug to fix, not an outage: let it throw.
+    return schema.parse(body);
   }
 
-  // --------------------------------------------------------------------------
-  // Places - Text Search
-  // --------------------------------------------------------------------------
-
-  async textSearch(params: TextSearchParams): Promise<{ places: Place[] }> {
-    const body: Record<string, unknown> = {
-      textQuery: params.textQuery,
-      maxResultCount: params.maxResultCount ?? 10,
-      languageCode: params.languageCode ?? 'en',
-    };
-
-    if (params.locationBias) {
-      if ('radius' in params.locationBias) {
-        body.locationBias = { circle: params.locationBias };
-      } else {
-        body.locationBias = {
-          circle: {
-            center: params.locationBias,
-            radius: 5000, // Default 5km bias
+  return {
+    async searchNearby(params, signal) {
+      const { places: found = [] } = await request(
+        `${places}/places:searchNearby`,
+        {
+          method: 'POST',
+          body: {
+            locationRestriction: { circle: { center: params.location, radius: params.radius } },
+            maxResultCount: params.maxResultCount ?? 10,
+            rankPreference: params.rankPreference ?? 'DISTANCE',
+            languageCode: params.languageCode ?? 'en',
+            ...(params.includedTypes?.length ? { includedTypes: params.includedTypes } : {}),
           },
-        };
+          fieldMask: searchFieldMask(['basic', 'rating', 'hours']),
+        },
+        PlacesResponse,
+        signal,
+      );
+      return found;
+    },
+
+    async searchText(params, signal) {
+      const bias = params.locationBias;
+      const { places: found = [] } = await request(
+        `${places}/places:searchText`,
+        {
+          method: 'POST',
+          body: {
+            textQuery: params.textQuery,
+            maxResultCount: params.maxResultCount ?? 10,
+            languageCode: params.languageCode ?? 'en',
+            // A bare point is biased to a 5 km circle around it.
+            ...(bias && {
+              locationBias: { circle: 'radius' in bias ? bias : { center: bias, radius: 5000 } },
+            }),
+            ...(params.openNow !== undefined && { openNow: params.openNow }),
+            ...(params.minRating !== undefined && { minRating: params.minRating }),
+            ...(params.priceLevels?.length ? { priceLevels: params.priceLevels } : {}),
+            ...(params.rankPreference && { rankPreference: params.rankPreference }),
+          },
+          fieldMask: searchFieldMask(['basic', 'rating', 'hours']),
+        },
+        PlacesResponse,
+        signal,
+      );
+      return found;
+    },
+
+    async getPlace(params, signal) {
+      return request(
+        `${places}/places/${params.placeId}`,
+        { method: 'GET', fieldMask: params.fields.join(',') },
+        PlaceShape,
+        signal,
+      );
+    },
+
+    async getPhotoUri(photoName, { maxWidth, maxHeight }, signal) {
+      if (!PHOTO_NAME.test(photoName)) {
+        throw new GoogleMapsError('Invalid Google photo resource name');
       }
-    }
-
-    if (params.includedType) {
-      body.includedType = params.includedType;
-    }
-    if (params.openNow !== undefined) {
-      body.openNow = params.openNow;
-    }
-    if (params.minRating !== undefined) {
-      body.minRating = params.minRating;
-    }
-    if (params.priceLevels?.length) {
-      body.priceLevels = params.priceLevels;
-    }
-    if (params.rankPreference) {
-      body.rankPreference = params.rankPreference;
-    }
-
-    const fieldMask = buildFieldMask(['basic', 'rating', 'hours']);
-
-    return this.request(PLACES_API_BASE, '/places:searchText', {
-      method: 'POST',
-      body: JSON.stringify(body),
-      fieldMask,
-    });
-  }
-
-  // --------------------------------------------------------------------------
-  // Places - Get Details
-  // --------------------------------------------------------------------------
-
-  async getPlaceDetails(params: PlaceDetailsParams): Promise<Place> {
-    const fieldMask = params.fields.map((f) => `${f}`).join(',');
-
-    return this.request(PLACES_API_BASE, `/places/${params.placeId}`, {
-      method: 'GET',
-      fieldMask,
-    });
-  }
-
-  // --------------------------------------------------------------------------
-  // Places - Get Photo URI
-  // --------------------------------------------------------------------------
-
-  getPhotoUri(photoName: string, maxWidth: number = 400, maxHeight?: number): string {
-    const params = new URLSearchParams({
-      key: this.apiKey,
-      maxWidthPx: String(maxWidth),
-    });
-    if (maxHeight) {
-      params.set('maxHeightPx', String(maxHeight));
-    }
-    return `${PLACES_API_BASE}/${photoName}/media?${params.toString()}`;
-  }
-
-  // --------------------------------------------------------------------------
-  // Routes - Compute Routes
-  // --------------------------------------------------------------------------
-
-  async computeRoutes(params: ComputeRoutesParams): Promise<{ routes: Route[] }> {
-    const formatWaypoint = (wp: LatLng | { placeId: string } | { address: string }) => {
-      if ('latitude' in wp) {
-        return { location: { latLng: wp } };
+      for (const dimension of [maxWidth, maxHeight]) {
+        if (
+          dimension !== undefined &&
+          (!Number.isInteger(dimension) || dimension < 1 || dimension > MAX_PHOTO_PX)
+        ) {
+          throw new GoogleMapsError(
+            `Photo dimensions must be integers between 1 and ${MAX_PHOTO_PX}`,
+          );
+        }
       }
-      if ('placeId' in wp) {
-        return { placeId: wp.placeId };
+      // Ask for the media URL as JSON instead of following Google's redirect. The key stays in
+      // the request header, and never reaches a URL the model or the user can see.
+      const query = new URLSearchParams({
+        maxWidthPx: String(maxWidth),
+        skipHttpRedirect: 'true',
+      });
+      if (maxHeight !== undefined) query.set('maxHeightPx', String(maxHeight));
+      const { photoUri } = await request(
+        `${places}/${photoName}/media?${query}`,
+        { method: 'GET' },
+        PhotoMediaResponse,
+        signal,
+      );
+      if (!isSafePhotoUrl(photoUri, secrets)) {
+        throw new GoogleMapsError('Google returned an invalid photo URL');
       }
-      return { address: wp.address };
-    };
+      return new URL(photoUri).href;
+    },
 
-    const body: Record<string, unknown> = {
-      origin: formatWaypoint(params.origin),
-      destination: formatWaypoint(params.destination),
-      travelMode: params.travelMode,
-      languageCode: params.languageCode ?? 'en',
-    };
+    async computeRoutes(params, signal) {
+      const waypoint = (point: Waypoint) =>
+        'latitude' in point
+          ? { location: { latLng: point } }
+          : 'placeId' in point
+            ? { placeId: point.placeId }
+            : { address: point.address };
 
-    if (params.intermediates?.length) {
-      body.intermediates = params.intermediates.map(formatWaypoint);
-    }
+      const { routes: found = [] } = await request(
+        `${routes}/directions/v2:computeRoutes`,
+        {
+          method: 'POST',
+          body: {
+            origin: waypoint(params.origin),
+            destination: waypoint(params.destination),
+            travelMode: params.travelMode,
+            languageCode: params.languageCode ?? 'en',
+            ...departure(params.travelMode, params.departureTime),
+            ...(params.routeModifiers && { routeModifiers: params.routeModifiers }),
+          },
+          fieldMask: ROUTE_FIELD_MASK,
+        },
+        RoutesResponse,
+        signal,
+      );
+      return found;
+    },
 
-    // When departureTime is set, use TRAFFIC_AWARE routing (required by API)
-    // Transit doesn't use routingPreference
-    if (params.departureTime) {
-      body.departureTime = params.departureTime;
-      if (params.travelMode !== 'TRANSIT') {
-        body.routingPreference = 'TRAFFIC_AWARE_OPTIMAL';
-      }
-    }
+    async computeRouteMatrix(params, signal) {
+      const waypoint = (point: Waypoint) => ({
+        waypoint:
+          'latitude' in point
+            ? { location: { latLng: point } }
+            : 'placeId' in point
+              ? { placeId: point.placeId }
+              : { address: point.address },
+      });
 
-    if (params.computeAlternativeRoutes) {
-      body.computeAlternativeRoutes = params.computeAlternativeRoutes;
-    }
-    if (params.routeModifiers) {
-      body.routeModifiers = params.routeModifiers;
-    }
+      return request(
+        `${routes}/distanceMatrix/v2:computeRouteMatrix`,
+        {
+          method: 'POST',
+          body: {
+            origins: params.origins.map(waypoint),
+            destinations: params.destinations.map(waypoint),
+            travelMode: params.travelMode,
+            languageCode: params.languageCode ?? 'en',
+            ...departure(params.travelMode, params.departureTime),
+          },
+          fieldMask: MATRIX_FIELD_MASK,
+        },
+        MatrixResponse,
+        signal,
+      );
+    },
+  };
+}
 
-    const fieldMask = [
-      'routes.distanceMeters',
-      'routes.duration',
-      'routes.polyline.encodedPolyline',
-      'routes.legs.distanceMeters',
-      'routes.legs.duration',
-      'routes.legs.startLocation',
-      'routes.legs.endLocation',
-      'routes.legs.steps.distanceMeters',
-      'routes.legs.steps.staticDuration',
-      'routes.legs.steps.navigationInstruction',
-      'routes.legs.steps.travelMode',
-      'routes.legs.steps.transitDetails',
-      'routes.localizedValues',
-      'routes.legs.localizedValues',
-      'routes.legs.steps.localizedValues',
-    ].join(',');
+/** A departure time needs traffic-aware routing, except for transit, which has none. */
+function departure(mode: TravelMode, departureTime: string | undefined) {
+  if (!departureTime) return {};
+  return {
+    departureTime,
+    ...(mode !== 'TRANSIT' && { routingPreference: 'TRAFFIC_AWARE_OPTIMAL' }),
+  };
+}
 
-    return this.request(ROUTES_COMPUTE_URL, '', {
-      method: 'POST',
-      body: JSON.stringify(body),
-      fieldMask,
-    });
-  }
-
-  // --------------------------------------------------------------------------
-  // Routes - Compute Route Matrix
-  // --------------------------------------------------------------------------
-
-  async computeRouteMatrix(
-    params: ComputeRouteMatrixParams,
-  ): Promise<RouteMatrixElement[]> {
-    const formatWaypoint = (wp: LatLng | { placeId: string } | { address: string }) => {
-      if ('latitude' in wp) {
-        return { waypoint: { location: { latLng: wp } } };
-      }
-      if ('placeId' in wp) {
-        return { waypoint: { placeId: wp.placeId } };
-      }
-      return { waypoint: { address: wp.address } };
-    };
-
-    const body: Record<string, unknown> = {
-      origins: params.origins.map(formatWaypoint),
-      destinations: params.destinations.map(formatWaypoint),
-      travelMode: params.travelMode,
-      languageCode: params.languageCode ?? 'en',
-    };
-
-    // When departureTime is set, use TRAFFIC_AWARE routing (required by API)
-    if (params.departureTime) {
-      body.departureTime = params.departureTime;
-      if (params.travelMode !== 'TRANSIT') {
-        body.routingPreference = 'TRAFFIC_AWARE_OPTIMAL';
-      }
-    }
-
-    // Route Matrix API returns array directly (streaming format)
-    // For simplicity, we use the non-streaming approach
-    return this.request(ROUTES_MATRIX_URL, '', {
-      method: 'POST',
-      body: JSON.stringify(body),
-      fieldMask:
-        'originIndex,destinationIndex,status,condition,distanceMeters,duration,staticDuration,localizedValues',
-    });
-  }
+/** Only plain HTTPS URLs that carry no credentials, and never the API key itself. */
+function isSafePhotoUrl(value: unknown, secrets: string[]): value is string {
+  if (typeof value !== 'string' || !URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (
+    url.protocol === 'https:' &&
+    !url.username &&
+    !url.password &&
+    !url.hash &&
+    ![...url.searchParams.keys()].some((name) => /^(key|api_key)$/i.test(name)) &&
+    !secrets.some((secret) => url.href.includes(secret))
+  );
 }

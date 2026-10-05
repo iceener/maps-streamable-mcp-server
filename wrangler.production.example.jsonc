@@ -1,0 +1,29 @@
+// The shape of wrangler.production.jsonc, with stand-in values. Copy it to that name and
+// put in your own: the real file is gitignored. Tests serve this file as "production"
+// in process, and the workerd smoke run starts it when the real file is absent.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "google-maps",
+  "account_id": "<your-account-id>",
+  "workers_dev": true,
+  "vars": {
+    "NODE_ENV": "production",
+    "MCP_PUBLIC_URL": "https://google-maps.example.workers.dev/mcp",
+    "MCP_ALLOWED_HOSTS": "google-maps.example.workers.dev",
+    "MCP_ALLOWED_ORIGIN_HOSTNAMES": "google-maps.example.workers.dev,claude.ai,claude.com,alice.example.org,ai.example.net,agi.example.net,example.org",
+    "MCP_LEGACY_MODE": "stateless",
+    "MCP_MAX_REQUEST_BYTES": "1048576",
+    "AUTH_MODE": "bearer",
+    "LOG_LEVEL": "info"
+  },
+
+  // The same code and runtime as wrangler.jsonc.
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
+}

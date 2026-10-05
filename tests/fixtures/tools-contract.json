@@ -1,0 +1,288 @@
+{
+  "result": {
+    "tools": [
+      {
+        "name": "search_places",
+        "description": "Find places by text query OR by type near a location. Unified search for nearby and text-based queries.\n\nSEARCH MODES (mutually exclusive):\n1. Text query: Pass 'query' (e.g., \"sushi near Central Park\", \"Starbucks\")\n2. Nearby by type: Pass 'types' array (e.g., [\"restaurant\", \"cafe\"])  \n3. Everything nearby: Pass neither (returns all places within radius)\n\nINPUTS:\n- location: { latitude, longitude } (REQUIRED) — user's current position\n- query?: string — text search (name, category, area)\n- types?: string[] — place types for nearby search (see: https://developers.google.com/maps/documentation/places/web-service/place-types)\n- radius?: number — search radius in meters (default: 1000, max: 50000)\n- open_now?: boolean — only open places (default: false)\n- min_rating?: number — minimum rating 0-5\n- price_levels?: [\"FREE\"|\"INEXPENSIVE\"|\"MODERATE\"|\"EXPENSIVE\"|\"VERY_EXPENSIVE\"]\n- max_results?: number — 1-20 (default: 10)\n- sort_by?: \"distance\"|\"rating\"|\"relevance\" (default: distance)\n\nRETURNS: List of places with:\n- id (use with get_place), name, address, location\n- rating, user_rating_count, price_level\n- open_now, business_status\n- google_maps_uri (link to Google Maps)\n\nEXAMPLES:\n- Nearby cafes: { location: {...}, types: [\"cafe\"] }\n- Text search: { location: {...}, query: \"pizza\" }\n- Open pharmacies: { location: {...}, types: [\"pharmacy\"], open_now: true }\n- Best rated: { location: {...}, types: [\"restaurant\"], sort_by: \"rating\", min_rating: 4 }",
+        "inputSchema": {
+          "type": "object",
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "location": {
+              "type": "object",
+              "properties": {
+                "latitude": {
+                  "type": "number",
+                  "minimum": -90,
+                  "maximum": 90,
+                  "description": "Latitude"
+                },
+                "longitude": {
+                  "type": "number",
+                  "minimum": -180,
+                  "maximum": 180,
+                  "description": "Longitude"
+                }
+              },
+              "required": ["latitude", "longitude"],
+              "description": "Current location (latitude, longitude)"
+            },
+            "query": {
+              "description": "Text search query (e.g., \"sushi near Central Park\", \"Starbucks\")",
+              "type": "string"
+            },
+            "types": {
+              "description": "Place types for nearby search (e.g., [\"restaurant\", \"cafe\"]). See: https://developers.google.com/maps/documentation/places/web-service/place-types",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "radius": {
+              "default": 1000,
+              "description": "Search radius in meters (default: 1000, max: 50000)",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50000
+            },
+            "open_now": {
+              "default": false,
+              "description": "Only return places that are open now",
+              "type": "boolean"
+            },
+            "min_rating": {
+              "description": "Minimum rating (0-5)",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "price_levels": {
+              "description": "Filter by price level",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["FREE", "INEXPENSIVE", "MODERATE", "EXPENSIVE", "VERY_EXPENSIVE"]
+              }
+            },
+            "max_results": {
+              "default": 10,
+              "description": "Maximum results to return (1-20)",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "sort_by": {
+              "default": "distance",
+              "description": "Sort results by: distance, rating, or relevance",
+              "type": "string",
+              "enum": ["distance", "rating", "relevance"]
+            },
+            "language": {
+              "default": "en",
+              "description": "Language code (e.g., \"en\", \"pl\", \"de\")",
+              "type": "string"
+            }
+          },
+          "required": ["location"]
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": true
+        }
+      },
+      {
+        "name": "get_place",
+        "description": "Get detailed information about a specific place by ID.\n\nINPUTS:\n- place_id: string (REQUIRED) — from search_places results\n- fields?: [\"basic\"|\"contact\"|\"hours\"|\"reviews\"|\"photos\"] — what to include (default: [\"basic\", \"hours\"])\n- language?: string — language code (default: \"en\")\n- max_photos?: number — 1-10 (default: 3)\n- max_reviews?: number — 1-5 (default: 3)\n\nFIELD CATEGORIES:\n- basic: name, address, rating, price level, types, location, google_maps_uri\n- contact: phone, website\n- hours: opening hours, open now status, business status\n- reviews: user reviews with ratings\n- photos: photo URLs with attributions\n\nRETURNS based on requested fields:\n- Basic: id, name, address, rating, user_rating_count, price_level, types\n- Contact: phone, website, google_maps_uri\n- Hours: open_now, business_status, opening_hours (by day)\n- Reviews: array of { author, rating, text, relative_time }\n- Photos: array of { uri, width, height, attribution }\n\nEXAMPLES:\n- Quick check if open: { place_id: \"...\", fields: [\"hours\"] }\n- Full info: { place_id: \"...\", fields: [\"basic\", \"contact\", \"hours\", \"reviews\"] }\n- Get photos: { place_id: \"...\", fields: [\"photos\"], max_photos: 5 }",
+        "inputSchema": {
+          "type": "object",
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "place_id": {
+              "type": "string",
+              "description": "Place ID from search_places results"
+            },
+            "fields": {
+              "default": ["basic", "hours"],
+              "description": "Information to include: basic (name, address, rating), contact (phone, website), hours (opening hours), reviews (user reviews), photos (photo URLs)",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["basic", "contact", "hours", "reviews", "photos"]
+              }
+            },
+            "language": {
+              "default": "en",
+              "description": "Language code (e.g., \"en\", \"pl\", \"de\")",
+              "type": "string"
+            },
+            "max_photos": {
+              "default": 3,
+              "description": "Maximum photos to return",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "max_reviews": {
+              "default": 3,
+              "description": "Maximum reviews to return",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            }
+          },
+          "required": ["place_id"]
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": true
+        }
+      },
+      {
+        "name": "get_route",
+        "description": "Get directions to one destination OR compare distances to multiple destinations.\n\nINPUTS:\n- origin: { latitude, longitude } | { place_id } | { address } (REQUIRED)\n- destinations: array of waypoints (REQUIRED) — same format as origin\n  - Single destination → full route with optional turn-by-turn\n  - Multiple destinations → distance/duration matrix (which is closest?)\n- mode?: \"walk\"|\"drive\"|\"transit\"|\"bicycle\" (default: \"walk\")\n- include_steps?: boolean — turn-by-turn instructions (default: false)\n- include_polyline?: boolean — encoded path for map (default: false)\n- departure_time?: string — ISO 8601 or \"now\" (required for transit)\n- avoid?: [\"tolls\"|\"highways\"|\"ferries\"]\n- language?: string (default: \"en\")\n\nSINGLE DESTINATION RETURNS:\n- duration_seconds, duration_text (e.g., \"15 min\")\n- distance_meters, distance_text (e.g., \"1.2 km\")\n- warnings (if any)\n- steps (if include_steps: true): array of { instruction, distance_text, duration_text, maneuver }\n  - Transit steps include: line, vehicle_type, departure_stop, arrival_stop, stop_count\n\nMULTIPLE DESTINATIONS RETURNS:\n- destinations: array of { index, available, duration_text, distance_text }\n- closest_index: index of nearest destination\n\nEXAMPLES:\n- Walking directions: { origin: {...}, destinations: [{ place_id: \"...\" }], mode: \"walk\", include_steps: true }\n- Transit with time: { origin: {...}, destinations: [{...}], mode: \"transit\", departure_time: \"now\", include_steps: true }\n- Which is closer: { origin: {...}, destinations: [{ place_id: \"A\" }, { place_id: \"B\" }] }\n- Driving, avoid tolls: { origin: {...}, destinations: [{...}], mode: \"drive\", avoid: [\"tolls\"] }",
+        "inputSchema": {
+          "type": "object",
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "origin": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "latitude": {
+                      "type": "number",
+                      "minimum": -90,
+                      "maximum": 90
+                    },
+                    "longitude": {
+                      "type": "number",
+                      "minimum": -180,
+                      "maximum": 180
+                    }
+                  },
+                  "required": ["latitude", "longitude"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "place_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["place_id"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["address"]
+                }
+              ],
+              "description": "Starting point: coordinates, place_id, or address"
+            },
+            "destinations": {
+              "minItems": 1,
+              "maxItems": 25,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "latitude": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "longitude": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      }
+                    },
+                    "required": ["latitude", "longitude"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "place_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["place_id"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "address": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["address"]
+                  }
+                ]
+              },
+              "description": "Destination(s): single destination for route, multiple for distance matrix"
+            },
+            "mode": {
+              "default": "walk",
+              "description": "Travel mode (default: walk for watch-based navigation)",
+              "type": "string",
+              "enum": ["walk", "drive", "transit", "bicycle"]
+            },
+            "include_steps": {
+              "default": false,
+              "description": "Include turn-by-turn instructions",
+              "type": "boolean"
+            },
+            "include_polyline": {
+              "default": false,
+              "description": "Include encoded polyline for map display",
+              "type": "boolean"
+            },
+            "departure_time": {
+              "description": "Departure time (ISO 8601). Use \"now\" for current time. Required for transit.",
+              "type": "string"
+            },
+            "avoid": {
+              "description": "Route features to avoid",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["tolls", "highways", "ferries"]
+              }
+            },
+            "language": {
+              "default": "en",
+              "description": "Language for instructions",
+              "type": "string"
+            }
+          },
+          "required": ["origin", "destinations"]
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": true
+        }
+      }
+    ],
+    "resultType": "complete",
+    "ttlMs": 60000,
+    "cacheScope": "private",
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "Google Maps MCP",
+        "title": "Google Maps MCP",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "jsonrpc": "2.0",
+  "id": 1
+}

@@ -1,0 +1,299 @@
+[
+  {
+    "label": "health",
+    "route": "GET /health",
+    "status": 200,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json",
+    "body": "{\"status\":\"ok\",\"runtime\":\"cloudflare-workers\",\"protocol\":\"2026-07-28\",\"legacyMode\":\"stateless\",\"authEnabled\":true,\"timestamp\":\"2026-10-05T13:43:36.194Z\"}"
+  },
+  {
+    "label": "icon",
+    "route": "GET /icon.svg",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "root",
+    "route": "GET /",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "unknown path",
+    "route": "GET /missing",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "discovery",
+    "route": "GET /.well-known/oauth-protected-resource",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "discovery",
+    "route": "GET /.well-known/oauth-protected-resource/mcp",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "discovery",
+    "route": "GET /.well-known/oauth-authorization-server",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "discovery",
+    "route": "GET /.well-known/openid-configuration",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "oauth route",
+    "route": "GET /authorize",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "oauth route",
+    "route": "POST /token",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "oauth route",
+    "route": "POST /register",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "oauth route",
+    "route": "POST /revoke",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "oauth route",
+    "route": "GET /callback",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "oauth route",
+    "route": "GET /oauth/callback",
+    "status": 404,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/plain; charset=UTF-8",
+    "body": "Not Found"
+  },
+  {
+    "label": "no token",
+    "route": "POST /mcp",
+    "status": 401,
+    "wwwAuthenticate": "Bearer",
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32001,\"message\":\"Unauthorized: Invalid or missing bearer token\"},\"id\":null}"
+  },
+  {
+    "label": "wrong token",
+    "route": "POST /mcp",
+    "status": 401,
+    "wwwAuthenticate": "Bearer",
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32001,\"message\":\"Unauthorized: Invalid or missing bearer token\"},\"id\":null}"
+  },
+  {
+    "label": "Google key as bearer",
+    "route": "POST /mcp",
+    "status": 401,
+    "wwwAuthenticate": "Bearer",
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32001,\"message\":\"Unauthorized: Invalid or missing bearer token\"},\"id\":null}"
+  },
+  {
+    "label": "token in x-api-key only",
+    "route": "POST /mcp",
+    "status": 401,
+    "wwwAuthenticate": "Bearer",
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32001,\"message\":\"Unauthorized: Invalid or missing bearer token\"},\"id\":null}"
+  },
+  {
+    "label": "lowercase bearer scheme",
+    "route": "POST /mcp",
+    "status": 200,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json",
+    "body": "{\"result\":{\"tools\":[{\"name\":\"search_places\",\"description\":\"Find places by text query OR by type near a location. Unified search for nearby and text-based querie…"
+  },
+  {
+    "label": "modern tools/list",
+    "route": "POST /mcp",
+    "status": 200,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json",
+    "body": "{\"result\":{\"tools\":[{\"name\":\"search_places\",\"description\":\"Find places by text query OR by type near a location. Unified search for nearby and text-based querie…"
+  },
+  {
+    "label": "legacy initialize",
+    "route": "POST /mcp",
+    "status": 200,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "text/event-stream",
+    "body": "event: message\ndata: {\"result\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"Google Maps\",\"title\":\"Google…"
+  },
+  {
+    "label": "allowed Origin",
+    "route": "POST /mcp",
+    "status": 200,
+    "wwwAuthenticate": null,
+    "allowOrigin": "https://claude.ai",
+    "contentType": "application/json",
+    "body": "{\"result\":{\"tools\":[{\"name\":\"search_places\",\"description\":\"Find places by text query OR by type near a location. Unified search for nearby and text-based querie…"
+  },
+  {
+    "label": "foreign Origin",
+    "route": "POST /mcp",
+    "status": 403,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Invalid Origin: evil.example\"},\"id\":null}"
+  },
+  {
+    "label": "foreign Host",
+    "route": "POST /mcp",
+    "status": 403,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Invalid Host: evil.example\"},\"id\":null}"
+  },
+  {
+    "label": "foreign Host",
+    "route": "GET /health",
+    "status": 403,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Invalid Host: evil.example\"},\"id\":null}"
+  },
+  {
+    "label": "GET with token",
+    "route": "GET /mcp",
+    "status": 405,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Method not allowed.\"},\"id\":null}"
+  },
+  {
+    "label": "DELETE with token",
+    "route": "DELETE /mcp",
+    "status": 405,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Method not allowed.\"},\"id\":null}"
+  },
+  {
+    "label": "GET without token",
+    "route": "GET /mcp",
+    "status": 401,
+    "wwwAuthenticate": "Bearer",
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32001,\"message\":\"Unauthorized: Invalid or missing bearer token\"},\"id\":null}"
+  },
+  {
+    "label": "preflight",
+    "route": "OPTIONS /mcp",
+    "status": 204,
+    "wwwAuthenticate": null,
+    "allowOrigin": "https://claude.ai",
+    "contentType": null,
+    "body": ""
+  },
+  {
+    "label": "preflight, custom header",
+    "route": "OPTIONS /mcp",
+    "status": 400,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": null,
+    "body": "CORS header not allowed: x-request-id"
+  },
+  {
+    "label": "preflight, DELETE",
+    "route": "OPTIONS /mcp",
+    "status": 405,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": null,
+    "body": "CORS method not allowed"
+  },
+  {
+    "label": "preflight, foreign Origin",
+    "route": "OPTIONS /mcp",
+    "status": 403,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Invalid Origin: evil.example\"},\"id\":null}"
+  },
+  {
+    "label": "body over 1 MiB",
+    "route": "POST /mcp",
+    "status": 413,
+    "wwwAuthenticate": null,
+    "allowOrigin": null,
+    "contentType": "application/json;charset=utf-8",
+    "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Request body exceeds the 1048576 byte limit\"},\"id\":null}"
+  }
+]
